@@ -31,7 +31,10 @@ def file_validator(in_file: str, file_type) -> Path | None:
     if not file_path.exists() or not file_path.is_file():
         raise argparse.ArgumentTypeError(f"{in_file} is not a valid file")
 
-    if file_type == "font" and file_path.suffix not in file_checks["font"]["format"]:
+    if (
+        file_type == "font"
+        and file_path.suffix not in file_checks["font"]["format"]
+    ):
         raise argparse.ArgumentTypeError(
             f"{in_file} has unsupported extension '{file_path.suffix}', expected one of {file_checks['font']['format']}"
         )
@@ -50,7 +53,9 @@ def parse_args() -> argparse.Namespace:
         version=VERSION,
     )
 
-    subparsers = parser.add_subparsers(help="Subcommand help", dest="command", required=True)
+    subparsers = parser.add_subparsers(
+        help="Subcommand help", dest="command", required=True
+    )
 
     painter = subparsers.add_parser(
         "painter",
@@ -80,7 +85,9 @@ def parse_args() -> argparse.Namespace:
     )
     painter.add_argument("--accession", help="Assembly Accession")
     painter.add_argument(
-        "--write_summary", action="store_true", help="Write a summary of the results"
+        "--write_summary",
+        action="store_true",
+        help="Write a summary of the results",
     )
     painter.add_argument(
         "-v",
@@ -112,7 +119,11 @@ def parse_args() -> argparse.Namespace:
         help="Genome index file (.fai)",
     )
     plotter.add_argument(
-        "-p", "--prefix", type=str, default="alg_plotter_v2", help="Output prefix of files"
+        "-p",
+        "--prefix",
+        type=str,
+        default="alg_plotter_v2",
+        help="Output prefix of files",
     )
     plotter.add_argument(
         "-m",
@@ -174,7 +185,11 @@ def parse_args() -> argparse.Namespace:
         help="Path to a chromosomes sizes file (an fai file, optional)",
     )
     plotter_2.add_argument(
-        "-p", "--prefix", type=str, default="alg_plotter_v2", help="Output prefix of files"
+        "-p",
+        "--prefix",
+        type=str,
+        default="alg_plotter_v2",
+        help="Output prefix of files",
     )
     plotter_2.add_argument(
         "-m",
@@ -197,7 +212,9 @@ def parse_args() -> argparse.Namespace:
     )
 
     # Font Arguments
-    font_path = os.path.join(os.path.dirname(__file__), "fonts", "OpenSans-Regular.ttf")
+    font_path = os.path.join(
+        os.path.dirname(__file__), "fonts", "OpenSans-Regular.ttf"
+    )
     plotter_2.add_argument(
         "--font",
         type=lambda s: file_validator(s, "font"),

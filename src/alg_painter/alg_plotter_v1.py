@@ -84,16 +84,22 @@ def prepare_data(location_file: Path) -> pd.DataFrame:
 
     # Remove rows where query_chr or assigned_chr contain ":"
     locations = locations[~locations["query_chr"].str.contains(":", na=False)]
-    locations = locations[~locations["assigned_chr"].str.contains(":", na=False)]
+    locations = locations[
+        ~locations["assigned_chr"].str.contains(":", na=False)
+    ]
 
     # Compute length per query chromosome as max position
-    locations["length"] = locations.groupby("query_chr")["position"].transform("max")
+    locations["length"] = locations.groupby("query_chr")["position"].transform(
+        "max"
+    )
     locations["start"] = 0
 
     return locations
 
 
-def prepare_data_with_index(location_file: Path, index_file: Path) -> pd.DataFrame:
+def prepare_data_with_index(
+    location_file: Path, index_file: Path
+) -> pd.DataFrame:
     """Load locations TSV and merge with a genome index (.fai) for lengths."""
     locations = pd.read_csv(location_file, sep="\t")
     contig_lengths = pd.read_csv(
@@ -105,11 +111,16 @@ def prepare_data_with_index(location_file: Path, index_file: Path) -> pd.DataFra
 
     # Remove rows where query_chr or assigned_chr contain ":"
     locations = locations[~locations["query_chr"].str.contains(":", na=False)]
-    locations = locations[~locations["assigned_chr"].str.contains(":", na=False)]
+    locations = locations[
+        ~locations["assigned_chr"].str.contains(":", na=False)
+    ]
 
     # Merge to get actual contig lengths
     locations = locations.merge(
-        contig_lengths[["Seq", "length"]], left_on="query_chr", right_on="Seq", how="left"
+        contig_lengths[["Seq", "length"]],
+        left_on="query_chr",
+        right_on="Seq",
+        how="left",
     )
     locations.drop(columns=["Seq"], inplace=True, errors="ignore")
     locations["start"] = 0
@@ -120,9 +131,9 @@ def prepare_data_with_index(location_file: Path, index_file: Path) -> pd.DataFra
 def filter_buscos(locations: pd.DataFrame, minimum: int = 3) -> pd.DataFrame:
     """Keep only chromosomes with at least *minimum* BUSCOs."""
     filtered_locations = locations.copy()
-    filtered_locations["n_busco"] = filtered_locations.groupby("query_chr")["query_chr"].transform(
-        "count"
-    )
+    filtered_locations["n_busco"] = filtered_locations.groupby("query_chr")[
+        "query_chr"
+    ].transform("count")
     return filtered_locations[filtered_locations["n_busco"] >= minimum]
 
 
@@ -239,9 +250,19 @@ def _render_chromosome_plot(
         length = chrom_data["length"].iloc[0] if not chrom_data.empty else 0
 
         positions = chrom_data["position"].values
-        colours = [colour_map.get(val, "lightgrey") for val in chrom_data[colour_column]]
+        colours = [
+            colour_map.get(val, "lightgrey")
+            for val in chrom_data[colour_column]
+        ]
         _draw_chromosome_row(
-            ax, y, 0, length, positions, colours, bar_width=bar_width, bar_height=bar_height
+            ax,
+            y,
+            0,
+            length,
+            positions,
+            colours,
+            bar_width=bar_width,
+            bar_height=bar_height,
         )
 
         ax.text(
@@ -257,7 +278,9 @@ def _render_chromosome_plot(
     ax.set_xlim(-0.15 * spp_df["length"].max(), spp_df["length"].max() * 1.05)
     ax.set_ylim(-row_height, n_chroms * row_height)
     ax.set_xlabel("Position (Mb)", fontsize=12)
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x / 1e6:.0f}"))
+    ax.xaxis.set_major_formatter(
+        plt.FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
+    )
     ax.set_yticks([])
 
     ax.set_title(f"$\\it{{{title}}}$\n{sub_title}", fontsize=14)
@@ -270,7 +293,8 @@ def _render_chromosome_plot(
         legend_keys = list(colour_map.keys())
 
     legend_handles = [
-        mpatches.Patch(facecolor=colour_map.get(k, "lightgrey"), label=k) for k in legend_keys
+        mpatches.Patch(facecolor=colour_map.get(k, "lightgrey"), label=k)
+        for k in legend_keys
     ]
     ax.legend(
         handles=legend_handles,
@@ -357,7 +381,9 @@ def paint_merians_all(
     bar_height: int,
 ) -> plt.Figure:
     """Plot ALL BUSCOs — coloured by Merian element (assigned_chr)."""
-    colour_palette_raw = hue_palette(32)  # THIS COULD BE UPDATED FOR ALG UNIT COUNT
+    colour_palette_raw = hue_palette(
+        32
+    )  # THIS COULD BE UPDATED FOR ALG UNIT COUNT
     colour_palette_raw.append("grey")  # for "self"
     colour_palette = dict(zip(MERIAN_ORDER, colour_palette_raw))
     chr_order = _chromosome_order(spp_df)
@@ -443,8 +469,12 @@ def plotter_v1_main(args: argparse.Namespace) -> None:
     logger.info(
         f"[Plotter V1] Number of contigs before filtering by number of BUSCOs: {total_contigs}"
     )
-    logger.info(f"[Plotter V1] Number of contigs removed by filtering : {num_removed}")
-    logger.info(f"[Plotter V1] Number of contigs post-filtering: {num_contigs}")
+    logger.info(
+        f"[Plotter V1] Number of contigs removed by filtering : {num_removed}"
+    )
+    logger.info(
+        f"[Plotter V1] Number of contigs post-filtering: {num_contigs}"
+    )
 
     num_contigs_str = str(num_contigs)
     bw = args.bar_width
@@ -452,14 +482,23 @@ def plotter_v1_main(args: argparse.Namespace) -> None:
 
     # ---- Select plot function based on flags ------------------------------
     if args.merians:
-        subset_merians: dict[str, str] = set_merian_colour_mapping(locations_filt)
+        subset_merians: dict[str, str] = set_merian_colour_mapping(
+            locations_filt
+        )
 
         if not args.differences:
             fig = paint_merians_all(
-                locations_filt, 1, args.prefix, num_contigs_str, bar_width=bw, bar_height=bh
+                locations_filt,
+                1,
+                args.prefix,
+                num_contigs_str,
+                bar_width=bw,
+                bar_height=bh,
             )
         else:
-            num_col = 1 if len(locations_filt["query_chr"].unique()) < 100 else 3
+            num_col = (
+                1 if len(locations_filt["query_chr"].unique()) < 100 else 3
+            )
             fig = paint_merians_differences_only(
                 locations_filt,
                 subset_merians,
@@ -472,11 +511,21 @@ def plotter_v1_main(args: argparse.Namespace) -> None:
     else:
         if not args.differences:
             fig = paint_species_all(
-                locations_filt, 1, args.prefix, num_contigs_str, bar_width=bw, bar_height=bh
+                locations_filt,
+                1,
+                args.prefix,
+                num_contigs_str,
+                bar_width=bw,
+                bar_height=bh,
             )
         else:
             fig = paint_species_differences_only(
-                locations_filt, 1, args.prefix, num_contigs_str, bar_width=bw, bar_height=bh
+                locations_filt,
+                1,
+                args.prefix,
+                num_contigs_str,
+                bar_width=bw,
+                bar_height=bh,
             )
 
     # ---- Save outputs -----------------------------------------------------

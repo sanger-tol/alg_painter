@@ -19,12 +19,16 @@ def _load_locations_file(location_file: Path) -> pd.DataFrame:
     locations = pd.read_csv(location_file, sep="\t")
 
     # Clean chromosome names (remove any :scaffolds)
-    locations["query_chr"] = locations["query_chr"].str.replace(":.*", "", regex=True)
+    locations["query_chr"] = locations["query_chr"].str.replace(
+        ":.*", "", regex=True
+    )
 
     return locations
 
 
-def load_data(location_file: Path, lengths_file=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_data(
+    location_file: Path, lengths_file=None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load BUSCO locations and chromosome lengths"""
     locations = _load_locations_file(location_file)
 
@@ -38,7 +42,9 @@ def load_data(location_file: Path, lengths_file=None) -> tuple[pd.DataFrame, pd.
         )
     else:
         # Fallback: estimate from max position + 5% padding
-        chrom_lengths = locations.groupby("query_chr")["position"].max().reset_index()
+        chrom_lengths = (
+            locations.groupby("query_chr")["position"].max().reset_index()
+        )
         chrom_lengths["length"] = chrom_lengths["position"] * 1.05
 
     return locations, chrom_lengths
@@ -52,8 +58,12 @@ def filter_chromosomes(locations, minimum_buscos=3):
     """
     Filter chromosomes by minimum BUSCO count
     """
-    busco_counts = locations.groupby("query_chr").size().reset_index(name="n_busco")
-    valid_chroms = busco_counts[busco_counts["n_busco"] >= minimum_buscos]["query_chr"]
+    busco_counts = (
+        locations.groupby("query_chr").size().reset_index(name="n_busco")
+    )
+    valid_chroms = busco_counts[busco_counts["n_busco"] >= minimum_buscos][
+        "query_chr"
+    ]
     return locations[locations["query_chr"].isin(valid_chroms)]
 
 
@@ -73,7 +83,11 @@ def calculate_merian_labels(locations, threshold=5):
     Returns {chromosome: 'M1; M3; M18'} for elements with >= threshold BUSCOs.
     """
     # Count BUSCOs per chromosome-Merian combination
-    counts = locations.groupby(["query_chr", "assigned_chr"]).size().reset_index(name="n")
+    counts = (
+        locations.groupby(["query_chr", "assigned_chr"])
+        .size()
+        .reset_index(name="n")
+    )
 
     # Filter by threshold
     counts = counts[counts["n"] >= threshold]
@@ -81,10 +95,13 @@ def calculate_merian_labels(locations, threshold=5):
     # Group by chromosome and join Merian elements
     labels = {}
     for chrom in counts["query_chr"].unique():
-        chrom_merians = counts[counts["query_chr"] == chrom]["assigned_chr"].tolist()
+        chrom_merians = counts[counts["query_chr"] == chrom][
+            "assigned_chr"
+        ].tolist()
         # Sort Merian elements (MZ first, then M1-M31 numerically)
         sorted_merians = sorted(
-            chrom_merians, key=lambda x: (x != "MZ", int(x[1:]) if x != "MZ" else 0)
+            chrom_merians,
+            key=lambda x: (x != "MZ", int(x[1:]) if x != "MZ" else 0),
         )
         labels[chrom] = "; ".join(sorted_merians)
 
@@ -109,15 +126,22 @@ def plot_merian_chromosomes(
     # Filter only valid Merian assignments for actual BUSCOs
     valid_merians = ["MZ"] + [f"M{i}" for i in range(1, 32)]
     locations_filtered = locations[
-        is_placeholder | locations["assigned_chr"].str.upper().isin(valid_merians)
+        is_placeholder
+        | locations["assigned_chr"].str.upper().isin(valid_merians)
     ]
-    locations_filtered["assigned_chr"] = locations_filtered["assigned_chr"].str.upper()
+    locations_filtered["assigned_chr"] = locations_filtered[
+        "assigned_chr"
+    ].str.upper()
 
     # Calculate Merian labels for each chromosome
-    merian_labels = calculate_merian_labels(locations, threshold=label_threshold)
+    merian_labels = calculate_merian_labels(
+        locations, threshold=label_threshold
+    )
 
     # Order chromosomes by length (descending) - USE ALL CHROMOSOMES FROM chrom_lengths
-    chrom_order = chrom_lengths.sort_values("length", ascending=False)["query_chr"].tolist()
+    chrom_order = chrom_lengths.sort_values("length", ascending=False)[
+        "query_chr"
+    ].tolist()
 
     # DO NOT FILTER - keep all chromosomes even if they have no BUSCOs
 
@@ -134,10 +158,17 @@ def plot_merian_chromosomes(
     # Plot chromosome bars
     for chrom in chrom_order:
         y = y_positions[chrom]
-        length = chrom_lengths[chrom_lengths["query_chr"] == chrom]["length"].values[0]
+        length = chrom_lengths[chrom_lengths["query_chr"] == chrom][
+            "length"
+        ].values[0]
         # Draw chromosome backbone (white rectangle with black border)
         rect = patches.Rectangle(
-            (0, y - 0.4), length, 0.8, facecolor="white", edgecolor="black", linewidth=0.5
+            (0, y - 0.4),
+            length,
+            0.8,
+            facecolor="white",
+            edgecolor="black",
+            linewidth=0.5,
         )
         ax.add_patch(rect)
 
@@ -159,7 +190,13 @@ def plot_merian_chromosomes(
         if chrom in merian_labels:
             label_text = merian_labels[chrom]
             ax.text(
-                length * 1.02, y, label_text, va="center", ha="left", fontsize=10, color="#333333"
+                length * 1.02,
+                y,
+                label_text,
+                va="center",
+                ha="left",
+                fontsize=10,
+                color="#333333",
             )
 
     # Set axis limits and labels
@@ -169,7 +206,9 @@ def plot_merian_chromosomes(
 
     # X-axis: position in Mb
     ax.set_xlabel("Position (Mb)", fontsize=11)
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x / 1e6:.0f}"))
+    ax.xaxis.set_major_formatter(
+        plt.FuncFormatter(lambda x, p: f"{x / 1e6:.0f}")
+    )
 
     # Y-axis: chromosome names
     ax.set_yticks([y_positions[c] for c in chrom_order])
@@ -184,7 +223,9 @@ def plot_merian_chromosomes(
     # Create legend
     legend_elements = []
     for merian in ["MZ"] + [f"M{i}" for i in range(1, 32)]:
-        legend_elements.append(patches.Patch(facecolor=palette[merian], label=merian))
+        legend_elements.append(
+            patches.Patch(facecolor=palette[merian], label=merian)
+        )
 
     ax.legend(
         handles=legend_elements,
@@ -210,7 +251,9 @@ def plot_merian_chromosomes(
 
 def plotter_v2_main(arguments):
     logger.info("[Plotter V2] Loading data from %s", arguments.file)
-    locations, chrom_lengths = load_data(arguments.file, arguments.lengths_file)
+    locations, chrom_lengths = load_data(
+        arguments.file, arguments.lengths_file
+    )
 
     logger.info(
         f"[Plotter V2] Plotting {len(locations)} BUSCOs across {len(chrom_lengths)} chromosomes"

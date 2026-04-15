@@ -14,12 +14,14 @@ def fetch_sequence_report(accession: str) -> list[dict]:
     params = {}
     if API_KEY:
         params["api_key"] = API_KEY
-    logger.info(f"[Fetch seq report] Fetching chromosome info from NCBI for {accession}...")
+    logger.info(
+        f"[Fetch seq report] Fetching chromosome info from NCBI for {accession}..."
+    )
     response = requests.get(url, headers=headers, params=params, timeout=60)
     response.raise_for_status()
-    return response.json().get("sequence_report", {}).get("records") or response.json().get(
-        "reports", []
-    )
+    return response.json().get("sequence_report", {}).get(
+        "records"
+    ) or response.json().get("reports", [])
 
 
 def chrom_lengths_with_unloc(records):

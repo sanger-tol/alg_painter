@@ -4,7 +4,10 @@ from collections import Counter
 from pathlib import Path
 
 from alg_painter.generics import write_tsv
-from alg_painter.ncbi_api import chrom_lengths_with_unloc, fetch_sequence_report
+from alg_painter.ncbi_api import (
+    chrom_lengths_with_unloc,
+    fetch_sequence_report,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +62,16 @@ def parse_busco_table(path: Path) -> tuple[list[tuple], list[str]]:
     return tbl, sorted(chroms)
 
 
-def build_location_rows(reference_map: dict[str, str], query_table: list[tuple]) -> list[str]:
+def build_location_rows(
+    reference_map: dict[str, str], query_table: list[tuple]
+) -> list[str]:
     rows = ["buscoID\tquery_chr\tposition\tassigned_chr\tstatus"]
     for busco_id, query_chromosome, start, end in query_table:
         position = (start + end) / 2
         assigned = reference_map.get(busco_id, "NA")
-        rows.append(f"{busco_id}\t{query_chromosome}\t{position}\t{assigned}\t{assigned}")
+        rows.append(
+            f"{busco_id}\t{query_chromosome}\t{position}\t{assigned}\t{assigned}"
+        )
     return rows
 
 
@@ -76,8 +83,12 @@ def painting_main(arguments):
     prefix_location.mkdir(parents=True, exist_ok=True)
 
     output_file_dict = {
-        "all_locs": Path(f"{prefix_location}/{arguments.prefix}_all_locations.tsv"),
-        "chrom_lengths": Path(f"{prefix_location}/{arguments.prefix}_chrom_lengths.tsv"),
+        "all_locs": Path(
+            f"{prefix_location}/{arguments.prefix}_all_locations.tsv"
+        ),
+        "chrom_lengths": Path(
+            f"{prefix_location}/{arguments.prefix}_chrom_lengths.tsv"
+        ),
         "summary": Path(f"{prefix_location}/{arguments.prefix}_summary.tsv"),
     }
 
@@ -91,11 +102,14 @@ def painting_main(arguments):
 
     # If ACCESSION is given then call the NCBI API to get chromosome lenths
     if arguments.accession:
-        logger.info(f"[Painter] Fetching sequence report for accession: {arguments.accession}")
+        logger.info(
+            f"[Painter] Fetching sequence report for accession: {arguments.accession}"
+        )
         seq_report = fetch_sequence_report(arguments.accession)
         pairs = chrom_lengths_with_unloc(seq_report)
         length_lines = ["Chrom\tLength_Mb"] + [
-            f"{chromosome}\t{basepairs / 1e6:.3f}" for chromosome, basepairs in pairs
+            f"{chromosome}\t{basepairs / 1e6:.3f}"
+            for chromosome, basepairs in pairs
         ]
         write_tsv(length_lines, output_file_dict["chrom_lengths"])
         chrom_order = [c for c, _ in pairs]
@@ -112,8 +126,12 @@ def painting_main(arguments):
 
     # Optional summary generation
     if arguments.write_summary:
-        logger.info(f"[Painter] Writing summary to: {output_file_dict['summary']}")
+        logger.info(
+            f"[Painter] Writing summary to: {output_file_dict['summary']}"
+        )
         counts = Counter(chrom for _, chrom, _, _ in query_table)
         counts.update({c: 0 for c in missing})
-        sum_lines = ["query_chr\tbusco_hits"] + [f"{c}\t{counts[c]}" for c in chrom_order]
+        sum_lines = ["query_chr\tbusco_hits"] + [
+            f"{c}\t{counts[c]}" for c in chrom_order
+        ]
         write_tsv(sum_lines, output_file_dict["summary"])
