@@ -1,0 +1,39 @@
+name: Run script tests
+on:
+  push:
+  pull_request:
+  release:
+
+jobs:
+  tests_scripts:
+    name: Test Scripts Functionally
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository to the runner
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Run Python Script
+        # --reference is the full Merian table
+        # --query is the full busco table
+        run: |
+          python3 src/buscopainter.py --reference_table reference_data/Merian_elements_full_table.tsv --query_table test_data/busco_full_table.tsv
+
+      # This will tell us if there is any difference between this and the truth data
+      - name: Diff the output
+        run: |
+          diff buscopainter_complete_location.tsv test_data/buscopainter_complete_location.tsv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: busco_painter_output
+          path: buscopainter_*
+          if-no-files-found: error
+          retention-days: 5
+          overwrite: true
