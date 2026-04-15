@@ -7,7 +7,14 @@ authors = [
     { name = "DLBPointon", email = "damonlbp@hotmail.co.uk" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "argparse>=1.4.0",
+    "logging>=0.4.9.6",
+    "matplotlib>=3.10.8",
+    "pandas>=3.0.2",
+    "pathlib>=1.0.1",
+    "requests>=2.33.1",
+]
 
 [project.scripts]
 alg = "alg_painter.cli:main"

@@ -1,5 +1,7 @@
 # ALG_painter
 
+This replaces the original sanger-tol/busco_painter scripts.
+
 A Python package for the plotting and painting of ALG units to busco results resulting in a ALG assignment plot.
 
 Currently, this is rather specific to the Merian Units assigned by Charlotte Wright based on odb10 output.
