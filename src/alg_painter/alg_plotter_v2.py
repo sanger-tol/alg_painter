@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import font_manager
 
+
 from alg_painter.plotter_colours import MERIAN_COLOURS
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,27 @@ def _load_locations_file(location_file: Path) -> pd.DataFrame:
     return locations
 
 
+def load_lengths(lengths_file: Path) -> pd.DataFrame:
+    """Load chromosome lengths from chromosome_lengths.tsv or a .fai index."""
+    with open(lengths_file) as fh:
+        first_line = fh.readline().strip().split("\t")
+
+    if first_line[:2] == ["Chrom", "Length_Mb"]:
+        chrom_lengths = pd.read_csv(lengths_file, sep="\t")
+        chrom_lengths["length"] = chrom_lengths["Length_Mb"] * 1e6
+        return chrom_lengths.rename(columns={"Chrom": "query_chr"})[
+            ["query_chr", "length"]
+        ]
+
+    return pd.read_csv(
+        lengths_file,
+        sep="\t",
+        header=None,
+        usecols=[0, 1],
+        names=["query_chr", "length"],
+    )
+
+
 def load_data(
     location_file: Path, lengths_file=None
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -34,12 +56,7 @@ def load_data(
 
     # Read or estimate chromosome lengths
     if lengths_file:
-        chrom_lengths = pd.read_csv(
-            lengths_file,
-            sep="\t",
-            header=None,
-            names=["query_chr", "length", "offset", "linebases", "linewidth"],
-        )
+        chrom_lengths = load_lengths(lengths_file)
     else:
         # Fallback: estimate from max position + 5% padding
         chrom_lengths = (
@@ -48,6 +65,7 @@ def load_data(
         chrom_lengths["length"] = chrom_lengths["position"] * 1.05
 
     return locations, chrom_lengths
+
 
 
 def get_palette(palette_name: str) -> dict:

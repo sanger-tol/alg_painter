@@ -182,7 +182,7 @@ def parse_args() -> argparse.Namespace:
         "--lengths_file",
         default=None,
         type=Path,
-        help="Path to a chromosomes sizes file (an fai file, optional)",
+        help="Path to a chromosome lengths TSV or genome index file (.fai, optional)",
     )
     plotter_2.add_argument(
         "-p",
