@@ -5,30 +5,31 @@ on:
   release:
 
 jobs:
-  tests_scripts:
-    name: Test Scripts Functionally
+  test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - name: Check out repository to the runner
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Install the latest version of uv and set the python version
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          fetch-depth: 0
+          python-version: ${{ matrix.python-version }}
 
-      - name: setup python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
+      - name: Install with python ${{ matrix.python-version }}
+        run: uv pip install ./
 
-      - name: Run Python Script
-        # --reference is the full Merian table
-        # --query is the full busco table
-        run: |
-          python3 src/buscopainter.py --reference_table reference_data/Merian_elements_full_table.tsv --query_table test_data/busco_full_table.tsv
+      - name: Run the 'alg paint' command
+        run: alg paint coleoptera_odb12 example_data/beetle_fulltables/Abax_parallelepipedus.tsv --busco-version odb12
+
+      - name: Run the 'alg plot' command
+        run: alg plot coleoptera_odb12 ./example_data/output/abax_parallelepipedus/TESTING_paint_all_locations.tsv ./example_data/output/abax_parallelepipedus/TESTING_paint_chrom_lengths.tsv
 
       # This will tell us if there is any difference between this and the truth data
       - name: Diff the output
         run: |
-          diff buscopainter_complete_location.tsv test_data/buscopainter_complete_location.tsv
+          diff alg/alg_painter_all_locations.tsv example_data/output/abax_parallelepipedus/TESTING_paint_all_locations.tsv
 
       - uses: actions/upload-artifact@v4
         with:
