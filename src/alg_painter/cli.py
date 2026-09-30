@@ -1,264 +1,268 @@
-import argparse
+import json
 import logging
 import os
+import sys
 from pathlib import Path
 
-from alg_painter.alg_painter import painting_main as alg_painter
-from alg_painter.alg_plotter_v1 import plotter_v1_main as alg_plotter_v1
-from alg_painter.alg_plotter_v2 import plotter_v2_main as alg_plotter_v2
+# Suppress matplotlib font debug messages
+import matplotlib
+import typer
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("alg_painter.log"),  # logs to file
-        logging.StreamHandler(),  # logs to console
-    ],
-)
-logger = logging.getLogger("alg_painter")
+from alg_painter.assign import assign_alg_to_full_table
+from alg_painter.cli_options import AlgClade, IndexFile, LocationFile, QueryFile
+from alg_painter.enums import AssemblyMode, GraphType, LogLevel
+from alg_painter.painter import paint_genomes
+from alg_painter.plotter import paint_to_plot
 
-VERSION = "0.1.0"
+matplotlib.set_loglevel("WARNING")
+logging.getLogger("matplotlib.font_manager").setLevel(logging.WARNING)
+
+app = typer.Typer()
 
 
-def file_validator(in_file: str, file_type) -> Path | None:
+def setup_logging(log_level: LogLevel, log_file: str) -> None:
+    if log_level not in LogLevel:
+        raise ValueError(f"Invalid log level: {log_level}\nSelect from {LogLevel}")
+
+    logging.basicConfig(
+        level=log_level.value,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),  # logs to file
+            logging.StreamHandler(),  # logs to console
+        ],
+    )
+
+    logging.getLogger(__name__)
+
+
+def load_palette_file(file_path: Path) -> dict[str, dict[str, str]]:
+    """Load palette JSON, with fallback to built-in if not found."""
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        # Get just the filename from the path and look for it in the package assets
+        file_name = Path(file_path).name
+        fall_back = Path(__file__).parent / "assets" / "alg_assignments" / file_name
+        logging.error(f"Palette file not found: {file_path}")
+        logging.error(f"Falling back to built-in palette: {fall_back}")
+        try:
+            with open(fall_back, "r") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            sys.exit(f"Palette file not found at {file_path} or {fall_back}")
+        except json.JSONDecodeError:
+            sys.exit(f"Invalid JSON in fallback palette: {fall_back}")
+    except json.JSONDecodeError:
+        sys.exit(f"Invalid JSON in palette file: {file_path}")
+
+
+def get_palette_data(file_path: Path, name: str = "") -> dict[str, str]:
+    valid_palette_names = []
+
+    palette_data = load_palette_file(file_path)
+
+    for key, value in palette_data.items():
+        valid_palette_names.append(key)
+
+    if name == "":
+        return {"options": ", ".join(valid_palette_names)}
+
+    if name not in valid_palette_names:
+        sys.exit(f"No palette found for {name} -- valid options are: {', '.join(valid_palette_names)}")
+
+    return palette_data[name]
+
+
+def check_clades(alg_clade: str, mapping_data: dict) -> None:
     """
-    Validate files exist and are infact files
+    Check if the given clade is valid against the mapping data.
     """
-    file_checks = {"font": {"format": [".ttf"], "validated": False}}
+    clades = list(mapping_data.keys())
+    clades.remove("CONSTANTS")
 
-    file_path = Path(in_file)
-
-    if not file_path.exists() or not file_path.is_file():
-        raise argparse.ArgumentTypeError(f"{in_file} is not a valid file")
-
-    if (
-        file_type == "font"
-        and file_path.suffix not in file_checks["font"]["format"]
-    ):
-        raise argparse.ArgumentTypeError(
-            f"{in_file} has unsupported extension '{file_path.suffix}', expected one of {file_checks['font']['format']}"
-        )
-
-    return file_path
+    if alg_clade not in clades:
+        sys.exit(f"No mapping found for clade: {alg_clade} - try one of: {', '.join(clades)}")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="alg_painter", description="Ancestral Linkage Group Painter"
-    )
-    parser.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=VERSION,
-    )
+@app.callback()
+def app_callback(
+    ctx: typer.Context,
+    mapping_file: Path = typer.Option(
+        default=os.path.join(os.path.dirname(__file__), "assets", "alg_mapping.json"),
+        help="Path to ALG mapping file",
+        show_default=True,
+        dir_okay=False,
+        exists=True,
+    ),
+    prefix: str = typer.Option("alg", help="Prefix for output files", show_default=True),
+    log_level: LogLevel = typer.Option(
+        LogLevel.INFO,
+        help="Logging level",
+        show_default=True,
+        case_sensitive=False,
+    ),
+    log_file: str = typer.Option("alg_painter.log", help="Path to log file", show_default=True),
+):
+    setup_logging(log_level, log_file)
+    # If no mapping file provided, use built-in fallback
 
-    subparsers = parser.add_subparsers(
-        help="Subcommand help", dest="command", required=True
-    )
-
-    painter = subparsers.add_parser(
-        "painter",
-        help="Run the Ancestral Linkage Group Painting command",
-        description="Paint the BUSCOs colored by their putative ALG assignments",
-    )
-    painter.add_argument(
-        "--alg_table",
-        "-a",
-        type=Path,
-        required=True,
-        help="The reference ALG table for mapping",
-    )
-    painter.add_argument(
-        "--query_table",
-        "-q",
-        type=Path,
-        required=True,
-        help="The Query table to paint (e.g. your assembly's ALG table)",
-    )
-    painter.add_argument(
-        "--prefix",
-        "-p",
-        type=str,
-        default="alg_painter",
-        help="Output prefix of files",
-    )
-    painter.add_argument("--accession", help="Assembly Accession")
-    painter.add_argument(
-        "--write_summary",
-        action="store_true",
-        help="Write a summary of the results",
-    )
-    painter.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=f"ALG-{VERSION}-PAINTER-2.1.0",
-    )
-
-    plotter = subparsers.add_parser(
-        name="plotter",
-        help="Original plotter for generic plotting of BUSCO locations",
-        description=(
-            "Generate a plot showing locations of putative Merian elements "
-            "(or species-level orthologs) in a genomic assembly."
-        ),
-    )
-    plotter.add_argument(
-        "-f",
-        "--file",
-        type=Path,
-        # required=True,
-        help="The output file from the painter command, should be a locations.tsv file",
-    )
-    plotter.add_argument(
-        "-i",
-        "--index",
-        type=Path,
-        default=None,
-        help="Genome index file (.fai)",
-    )
-    plotter.add_argument(
-        "-p",
-        "--prefix",
-        type=str,
-        default="alg_plotter_v2",
-        help="Output prefix of files",
-    )
-    plotter.add_argument(
-        "-m",
-        "--merians",
-        action="store_true",
-        default=False,
-        help="Are you comparing a genome to Merian elements?",
-    )
-    plotter.add_argument(
-        "-d",
-        "--differences",
-        action="store_true",
-        default=False,
-        help="Colour only BUSCOs moved from the dominant chromosome",
-    )
-    plotter.add_argument(
-        "-n",
-        "--minimum",
-        type=int,
-        default=3,
-        help="Minimum number of BUSCOs per contig to retain (default: 3)",
-    )
-    plotter.add_argument(
-        "--bar_height",
-        type=int,
-        default=12,
-        help="Height of each BUSCO bar in bp (default: 12)",
-    )
-    plotter.add_argument(
-        "--bar_width",
-        type=float,
-        default=2e4,
-        help="Half-width of each BUSCO bar in bp (default: 2e4)",
-    )
-    plotter.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=f"ALG-{VERSION}-PLOTTER-2.0.0",
-    )
-
-    plotter_2 = subparsers.add_parser(
-        "plotter2",
-        help="Newer Plotting process, currently in use for genomenotes, Plot BUSCO locations colored by ALG assignments",
-        description="Plot the BUSCO labelled by the ALG painter onto a per chromosome plot",
-    )
-    plotter_2.add_argument(
-        "-f",
-        "--file",
-        type=Path,
-        required=True,
-        help="The output file from the painter command, should be a locations.tsv file",
-    )
-    plotter_2.add_argument(
-        "-l",
-        "--lengths_file",
-        default=None,
-        type=Path,
-        help="Path to a chromosomes sizes file (an fai file, optional)",
-    )
-    plotter_2.add_argument(
-        "-p",
-        "--prefix",
-        type=str,
-        default="alg_plotter_v2",
-        help="Output prefix of files",
-    )
-    plotter_2.add_argument(
-        "-m",
-        "--minimum",
-        type=int,
-        default=3,
-        help="Minimum number of BUSCOs to plot per chromosome (default: 3)",
-    )
-    plotter_2.add_argument(
-        "--palette",
-        choices=["categorical", "spectrum", "merianbow", "merianbow4"],
-        default="categorical",
-        help="Palette to use for coloring BUSCOs (default: categorical), spectrum (turbo), merianbow (original for lepidoptera), merianbow4 (CVD-optimised for lepidoptera)",
-    )
-    plotter_2.add_argument(
-        "--label-threshold",
-        type=int,
-        default=5,
-        help="Minimum number of BUSCOs for an ALG unit appear on the plot (default: 5)",
-    )
-
-    # Font Arguments
-    font_path = os.path.join(
-        os.path.dirname(__file__), "fonts", "OpenSans-Regular.ttf"
-    )
-    plotter_2.add_argument(
-        "--font",
-        type=lambda s: file_validator(s, "font"),
-        default=font_path,
-        help="Path to the font file to use for plotting (default: OpenSans-Regular.ttf)",
-    )
-    plotter_2.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=f"ALG-{VERSION}-PLOTTER_V2-2.1.0",
-    )
-
-    return parser.parse_args()
+    ctx.obj = {"mapping_data": mapping_file, "prefix": prefix}
 
 
-def validate_locations(file_path) -> None:
-    with open(file_path, "r") as f:
-        first_line = f.readline()
-        print(first_line.split("\t"))
-        if first_line.split("\t") == [
-            "buscoID",
-            "query_chr",
-            "position",
-            "assigned_chr",
-            "status\n",
-        ]:
-            raise ValueError(f"File ({file_path}): first line is empty")
+@app.command("paint", help="Paint ALG locations into a genome.")
+def painter(
+    ctx: typer.Context,
+    alg_clade: AlgClade,
+    alg_query: QueryFile,
+    busco_version: str = typer.Option(None, help="BUSCO version", show_default=True),
+    accession: str = typer.Option(default="", help="GCA number", show_default=True),
+    ncbi_api_key: str = typer.Option(None, envvar="NCBI_API_KEY", help="NCBI API key", show_default=True),
+):
+    full_prefix = f"{ctx.obj['prefix']}"
+
+    try:
+        mapping_file = Path(ctx.obj.get("mapping_data"))
+        if mapping_file.is_file() and alg_clade:
+            with open(mapping_file) as f:
+                mapping_data = json.load(f)
+                check_clades(alg_clade, mapping_data)
+                clade_config = mapping_data.get(alg_clade, {})
+
+                ctx.obj.update(
+                    {
+                        "alg_clade": alg_clade,
+                        "alg_file": clade_config["alg_file"],
+                        "alg_version": busco_version or clade_config.get("odb"),
+                    }
+                )
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        sys.exit(1)
+
+    paint_genomes(
+        ctx,
+        accession,
+        full_prefix,
+        alg_query,
+        ncbi_api_key,
+    )
 
 
-def main():
-    args = parse_args()
+@app.command("plot", help="Plot ALG locations into a graph.")
+def plotter(
+    ctx: typer.Context,
+    alg_clade: AlgClade,
+    location_file: LocationFile,
+    index_file: IndexFile,
+    palette_name: str = typer.Option("default", help="Name of palette to use"),
+    assembly_mode: AssemblyMode = typer.Option(AssemblyMode.AUTO, case_sensitive=False, show_default=True),
+    bar_height: int = 12,
+    plot_style: GraphType = typer.Option(GraphType.TILES, help="Plot style (tiles, bars, or compact)"),
+    alg_file: Path = typer.Option(None, help="Path to ALG/BUSCO mappings", show_default=True, dir_okay=False),
+    palette: Path = typer.Option(None, help="Path to palette file", show_default=True, dir_okay=False),
+    label_threshold: int = typer.Option(None, help="Lower threshold of units for labeling", show_default=True),
+    panel_size: int = typer.Option(None, help="Size of panels in plots", show_default=True),
+    has_windowed_labels: bool = typer.Option(None, help="Whether to use windowed labels", show_default=True),
+    label_window_min_buscos: int = typer.Option(
+        None, help="Minimum number of BUSCOs for windowed labels", show_default=True
+    ),
+    min_plot_height: int = typer.Option(None, help="Minimum height of the plot", show_default=True),
+    column_count: int = typer.Option(None, help="Number of columns in the plot", show_default=True),
+    row_height: int = typer.Option(None, help="Height of rows in the plot", show_default=True),
+    tile_width_bp: int = typer.Option(None, help="Width of tiles in the plot", show_default=True),
+    legend_title: str = typer.Option(None, help="Title of the legend", show_default=True),
+    y_spacing: float = typer.Option(None, help="Spacing between rows in the plot", show_default=True),
+    label_window_mb: int = typer.Option(None, help="Size of window for windowed labels in Mb", show_default=True),
+):
+    clade_config = {}
+    full_prefix = f"{ctx.obj['prefix']}"
 
-    if args.command == "plotter" and args.file:
-        validate_locations(args.file)
+    try:
+        mapping_file = Path(ctx.obj.get("mapping_data"))
+        if mapping_file.is_file() and alg_clade:
+            with open(mapping_file) as f:
+                mapping_data = json.load(f)
+                check_clades(alg_clade, mapping_data)
+                clade_config = mapping_data.get(alg_clade, {})
+                constants = mapping_data.get("CONSTANTS", {})
+                clade_config.update(constants)
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        sys.exit(1)
 
-    match args.command:
-        case "painter":
-            alg_painter(args)
-        case "plotter":
-            alg_plotter_v1(args)
-        case "plotter2":
-            alg_plotter_v2(args)
+    if clade_config == {}:
+        sys.exit(f"No configuration found for alg_clade: {alg_clade}")
+
+    ctx.obj = {
+        "alg_clade": alg_clade,
+        "palette": palette or clade_config.get("palette", ""),
+        "alg_file": alg_file or clade_config.get("alg_file", ""),
+        "alg_unit_full": clade_config.get("alg_unit", {}).get("full", ""),
+        "label_threshold": label_threshold or clade_config.get("label_window_min_buscos", 5),
+        "panel_size": panel_size or clade_config.get("panel_size"),
+        "has_windowed_labels": has_windowed_labels or clade_config.get("has_windowed_labels", False),
+        "label_window_mb": label_window_mb or clade_config.get("label_window_default_mb"),
+        "label_window_min_buscos": label_window_min_buscos or clade_config.get("label_window_min_buscos", 5),
+        "column_count": column_count or clade_config.get("column_count", 1),
+        "min_plot_height": min_plot_height or clade_config.get("min_plot_height"),
+        "row_height": row_height or clade_config.get("row_height"),
+        "bar_height": bar_height or clade_config.get("bar_height"),
+        "tile_width_bp": tile_width_bp or clade_config.get("tile_width_bp"),
+        "legend_title": legend_title or clade_config.get("legend_title"),
+        "y_spacing": y_spacing or clade_config.get("y_spacing"),
+        "chrom_order": clade_config.get("custom_order"),
+    }
+
+    ctx.obj.update({k: v for k, v in constants.items() if k not in ctx.obj})
+
+    palette_data = get_palette_data(ctx.obj["palette"], palette_name)
+
+    logging.debug(ctx.obj)
+
+    paint_to_plot(
+        ctx,
+        assembly_mode.value,
+        full_prefix,
+        location_file,
+        palette_data,
+        index_file,
+        3,
+        False,
+        bar_height,
+        2e4,
+        plot_style.value,
+    )
+
+
+@app.command("assign")
+def assign_ancestral_algs(
+    ctx: typer.Context,
+    location_file: LocationFile,
+    full_table: Path = typer.Option(..., help="Path to busco full table", show_default=True),
+    outdir: Path = typer.Option(Path("."), help="Output directory", show_default=True),
+):
+    full_prefix = f"{ctx.obj['prefix']}_assigned"
+    assign_alg_to_full_table(location_file, full_table, full_prefix, outdir)
+
+
+@app.command("list_the_configs")
+def list_the_configs(ctx: typer.Context, alg_clade: AlgClade):
+    try:
+        mapping_file = Path(ctx.obj.get("mapping_data"))
+        print(f"Mapping file found at: {mapping_file}")
+        if mapping_file.is_file() and alg_clade:
+            with open(mapping_file) as f:
+                mapping_data = json.load(f)
+                clade_config = mapping_data.get(alg_clade, {})
+                if clade_config == {}:
+                    print(f"Config for {alg_clade} doesn't exist!")
+                else:
+                    palette_options = get_palette_data(clade_config.get("palette"))
+                    clade_config.update({"palette": palette_options})
+                    print(json.dumps(clade_config, indent=4))
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    app()
