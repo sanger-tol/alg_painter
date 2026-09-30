@@ -1,0 +1,14 @@
+{
+    "default": {
+        "db1a" : "#25d8a0ff",
+        "db1b" : "#168a65ff",
+        "db2a" : "#fccf8f",
+        "db2b" : "#f29717ff",
+        "db3a" : "#8d96e5",
+        "db3b" : "#005990ff",
+        "db4a" : "#f0e354ff",
+        "db4b" : "#e2d119ff",
+        "db5" : "#60b5e1ff",
+        "db6" : "black"
+    }
+}
