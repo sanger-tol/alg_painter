@@ -32,7 +32,7 @@ jobs:
       # This will tell us if there is any difference between this and the truth data
       - name: Diff the output
         run: |
-          diff ./alg/alg_painter_all_locations.tsv ./example_data/output/abax_parallelepipedus/TESTING_paint_all_locations.tsv
+          diff ./alg/alg_paint_all_locations.tsv ./example_data/output/abax_parallelepipedus/TESTING_paint_all_locations.tsv
 
       - uses: actions/upload-artifact@v4
         with:
