@@ -36,11 +36,15 @@ def detect_lengths_format(lengths_file: Path) -> str:
     raise ValueError(f"Could not detect lengths file format: {lengths_file}")
 
 
-def load_lengths(lengths_file: Path, assembly_mode: str = "auto") -> pl.DataFrame:
+def load_lengths(
+    lengths_file: Path, assembly_mode: str = "auto"
+) -> pl.DataFrame:
     """Load either final chrom_lengths.tsv or draft .fai lengths into bp."""
     detected = detect_lengths_format(lengths_file)
     if assembly_mode != "auto" and assembly_mode != detected:
-        expected = "Chrom/Length_Mb TSV" if assembly_mode == "final" else ".fai"
+        expected = (
+            "Chrom/Length_Mb TSV" if assembly_mode == "final" else ".fai"
+        )
         raise ValueError(
             f"{lengths_file} looks like {detected!r} lengths, but --assembly-mode {assembly_mode} expects {expected}"
         )
@@ -48,7 +52,9 @@ def load_lengths(lengths_file: Path, assembly_mode: str = "auto") -> pl.DataFram
     if detected == "final":
         chrom_lengths = pl.read_csv(lengths_file, separator="\t")
         chrom_lengths = (
-            chrom_lengths.with_columns(pl.col("Length_Mb").mul(1e6).alias("length"))
+            chrom_lengths.with_columns(
+                pl.col("Length_Mb").mul(1e6).alias("length")
+            )
             .select("Chrom", "length")
             .rename({"Chrom": "query_chr"})
         )
@@ -64,7 +70,9 @@ def load_lengths(lengths_file: Path, assembly_mode: str = "auto") -> pl.DataFram
 
 
 def load_data(
-    location_file: Path, lengths_file: Path | None = None, assembly_mode: str = "auto"
+    location_file: Path,
+    lengths_file: Path | None = None,
+    assembly_mode: str = "auto",
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Load BUSCO locations and chromosome/scaffold lengths."""
     locations = pl.read_csv(location_file, separator="\t")
@@ -78,7 +86,9 @@ def load_data(
                 "[WARN] No lengths file supplied; estimating lengths from BUSCO "
                 f"positions despite --assembly-mode {assembly_mode}"
             )
-        chrom_lengths = locations.groupby("query_chr")["position"].max().reset_index()  # type: ignore
+        chrom_lengths = (
+            locations.groupby("query_chr")["position"].max().reset_index()
+        )  # type: ignore
         chrom_lengths["length"] = chrom_lengths["position"] * 1.05
 
     return locations, chrom_lengths
@@ -89,7 +99,10 @@ def format_label(labels_list: list[str], wrap: int = 4) -> str:
     if wrap <= 0:
         return "; ".join(labels_list)
 
-    wrapped_lines = ["; ".join(labels_list[index : index + wrap]) for index in range(0, len(labels_list), wrap)]
+    wrapped_lines = [
+        "; ".join(labels_list[index : index + wrap])
+        for index in range(0, len(labels_list), wrap)
+    ]
     return "\n".join(wrapped_lines)
 
 
@@ -135,22 +148,36 @@ def calculate_windowed_alg_labels(
 
     counts = counts.with_columns(
         pl.col(alg_column)
-        .map_elements(lambda alg: alg_order_index.get(alg, len(alg_order)), return_dtype=pl.UInt32)
+        .map_elements(
+            lambda alg: alg_order_index.get(alg, len(alg_order)),
+            return_dtype=pl.UInt32,
+        )
         .alias("alg_sort")
     )
-    counts = counts.sort(["query_chr", "window", "n", "alg_sort"], descending=[False, False, True, False])
+    counts = counts.sort(
+        ["query_chr", "window", "n", "alg_sort"],
+        descending=[False, False, True, False],
+    )
 
     dominant = counts.group_by(["query_chr", "window"]).head(1)
-    totals = windowed.group_by(["query_chr", "window"]).agg(window_n=pl.col(alg_column).count())
+    totals = windowed.group_by(["query_chr", "window"]).agg(
+        window_n=pl.col(alg_column).count()
+    )
     dominant = dominant.join(totals, on=["query_chr", "window"])
-    dominant = dominant.with_columns((pl.col("n") / pl.col("window_n")).alias("fraction")).filter(
+    dominant = dominant.with_columns(
+        (pl.col("n") / pl.col("window_n")).alias("fraction")
+    ).filter(
         (pl.col("n") >= min_buscos) & (pl.col("fraction") >= min_fraction)
     )
 
     labels: dict[str, str] = {}
     for chrom in dominant.select("query_chr").unique().to_series():
-        chrom_windows = dominant.filter(pl.col("query_chr") == chrom).sort("window")
-        algs = collapse_consecutive(chrom_windows.select(alg_column).to_series().to_list())
+        chrom_windows = dominant.filter(pl.col("query_chr") == chrom).sort(
+            "window"
+        )
+        algs = collapse_consecutive(
+            chrom_windows.select(alg_column).to_series().to_list()
+        )
         if algs:
             labels[str(chrom)] = format_label(algs, wrap=wrap)
 
@@ -181,7 +208,10 @@ def calculate_alg_labels(
         chrom_counts = counts.filter(pl.col("query_chr") == chrom).clone()
         chrom_counts = chrom_counts.with_columns(
             pl.col(alg_column)
-            .map_elements(lambda alg: alg_order_index.get(alg, len(alg_order)), return_dtype=pl.UInt32)
+            .map_elements(
+                lambda alg: alg_order_index.get(alg, len(alg_order)),
+                return_dtype=pl.UInt32,
+            )
             .alias("alg_sort")
         )
         chrom_counts = chrom_counts.sort(["median_position", "alg_sort"])
@@ -221,19 +251,35 @@ def paint_to_plot(
     )
 
     # Validate ALGs
-    is_valid_alg = locations_df.select("assigned_alg").to_series().is_in(list(alg_order))
-    logger.info(f"Valid ALGs count: {is_valid_alg.sum()} out of {len(locations_df)}")
+    is_valid_alg = (
+        locations_df.select("assigned_alg").to_series().is_in(list(alg_order))
+    )
+    logger.info(
+        f"Valid ALGs count: {is_valid_alg.sum()} out of {len(locations_df)}"
+    )
 
-    plotted_chroms = set(chrom_lengths.select("query_chr").to_series().to_list())
-    chrom_lengths = chrom_lengths.filter(pl.col("query_chr").is_in(list(plotted_chroms)))
+    plotted_chroms = set(
+        chrom_lengths.select("query_chr").to_series().to_list()
+    )
+    chrom_lengths = chrom_lengths.filter(
+        pl.col("query_chr").is_in(list(plotted_chroms))
+    )
 
     if chrom_lengths.is_empty():
-        raise ValueError("No plotted chromosomes/scaffolds have matching lengths")
+        raise ValueError(
+            "No plotted chromosomes/scaffolds have matching lengths"
+        )
 
-    label_locations = locations_df.filter((pl.col("buscoID") != "NA") & is_valid_alg)
+    label_locations = locations_df.filter(
+        (pl.col("buscoID") != "NA") & is_valid_alg
+    )
 
     # Calculate labels (with windowing if specified)
-    if ctx.obj["has_windowed_labels"] and ctx.obj["label_window_mb"] and ctx.obj["label_window_mb"] > 0:
+    if (
+        ctx.obj["has_windowed_labels"]
+        and ctx.obj["label_window_mb"]
+        and ctx.obj["label_window_mb"] > 0
+    ):
         logger.info(
             f"Labelling dominant ALGs in {ctx.obj['label_window_mb']:g} Mb windows (min BUSCOs: {ctx.obj['label_window_min_buscos']})"
         )
@@ -318,4 +364,6 @@ def paint_to_plot(
                 window_mb=0.5,
             )
         case _:
-            raise ValueError(f"Unknown plot style: {plot_style}. Choose tiles, bars, or compact.")
+            raise ValueError(
+                f"Unknown plot style: {plot_style}. Choose tiles, bars, or compact."
+            )

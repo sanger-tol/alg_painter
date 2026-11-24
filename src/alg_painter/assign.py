@@ -17,9 +17,20 @@ def assign_alg_to_full_table(location_file, full_table, prefix, outdir):
         "Description",
     ]
 
-    fulltable_colnames_8 = ["buscoID", "Status", "Sequence", "Gene Start", "Gene End", "Strand", "Score", "Length"]
+    fulltable_colnames_8 = [
+        "buscoID",
+        "Status",
+        "Sequence",
+        "Gene Start",
+        "Gene End",
+        "Strand",
+        "Score",
+        "Length",
+    ]
 
-    location_data = pl.read_csv(location_file, separator="\t", comment_prefix="#")
+    location_data = pl.read_csv(
+        location_file, separator="\t", comment_prefix="#"
+    )
 
     if len(location_data.columns) == 10:
         full_table_colnames = fulltable_colnames_10
@@ -27,7 +38,11 @@ def assign_alg_to_full_table(location_file, full_table, prefix, outdir):
         full_table_colnames = fulltable_colnames_8
 
     full_table_data = pl.read_csv(
-        full_table, separator="\t", comment_prefix="#", has_header=False, new_columns=full_table_colnames
+        full_table,
+        separator="\t",
+        comment_prefix="#",
+        has_header=False,
+        new_columns=full_table_colnames,
     )
 
     joint_data = location_data.join(full_table_data, on="buscoID")
@@ -56,7 +71,9 @@ def assign_alg_to_full_table(location_file, full_table, prefix, outdir):
         )
         .with_columns(pl.col("Sequence").str.replace(r":.*", ""))
         .with_columns(
-            gene_start_swapped=pl.when(pl.col("Gene Start") < pl.col("Gene End"))
+            gene_start_swapped=pl.when(
+                pl.col("Gene Start") < pl.col("Gene End")
+            )
             .then(pl.col("Gene Start"))
             .otherwise(pl.col("Gene End")),
             gene_end_swapped=pl.when(pl.col("Gene Start") < pl.col("Gene End"))

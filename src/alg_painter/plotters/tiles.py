@@ -6,7 +6,11 @@ import matplotlib.pyplot as plt
 import polars as pl
 import typer
 
-from alg_painter.plotters.plotter_utils import get_chromosome_order, setup_font, split_balanced
+from alg_painter.plotters.plotter_utils import (
+    get_chromosome_order,
+    setup_font,
+    split_balanced,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,28 +30,41 @@ def main(
 
     chrom_order = get_chromosome_order(chrom_lengths, ctx)
     n_chroms = len(chrom_order)
-    logger.info(f"Plotting {len(locations)} BUSCOs across {n_chroms} chromosomes/scaffolds (tile style)...")
+    logger.info(
+        f"Plotting {len(locations)} BUSCOs across {n_chroms} chromosomes/scaffolds (tile style)..."
+    )
 
     panel_size = max(1, int(ctx.obj["panel_size"]))
     max_columns = max(1, int(ctx.obj["max_panel_columns"]))
     ncols = min(max_columns, max(1, math.ceil(n_chroms / panel_size)))
     panel_chroms_list = split_balanced(chrom_order, ncols)
-    chroms_per_panel = max((len(panel_chroms) for panel_chroms in panel_chroms_list), default=0)
-    logger.info(f"Layout: {ncols} column(s), up to {chroms_per_panel} chromosomes/scaffolds per column")
+    chroms_per_panel = max(
+        (len(panel_chroms) for panel_chroms in panel_chroms_list), default=0
+    )
+    logger.info(
+        f"Layout: {ncols} column(s), up to {chroms_per_panel} chromosomes/scaffolds per column"
+    )
 
     compact_layout = n_chroms > ctx.obj["compact_label_treshold"]
     label_fontsize = 8 if compact_layout else 10
     panel_height = max(
-        ctx.obj["min_plot_height"], ctx.obj["row_height"] * min(ctx.obj["max_panel_columns"], max(1, n_chroms))
+        ctx.obj["min_plot_height"],
+        ctx.obj["row_height"]
+        * min(ctx.obj["max_panel_columns"], max(1, n_chroms)),
     )
 
     panel_limits: list[float] = []
     for panel_chroms in panel_chroms_list:
         if panel_chroms:
             panel_max_length = (
-                chrom_lengths.filter(pl.col("query_chr").is_in(panel_chroms)).select("length").max().item()
+                chrom_lengths.filter(pl.col("query_chr").is_in(panel_chroms))
+                .select("length")
+                .max()
+                .item()
             )
-            panel_limits.append(panel_max_length * (1 + ctx.obj["label_padding_factor"]))
+            panel_limits.append(
+                panel_max_length * (1 + ctx.obj["label_padding_factor"])
+            )
         else:
             panel_limits.append(1.0)
 
@@ -70,12 +87,19 @@ def main(
             continue
 
         y_spacing = ctx.obj.get("y_spacing", 1.5)
-        y_positions = {chrom: i * y_spacing for i, chrom in enumerate(reversed(panel_chroms))}
+        y_positions = {
+            chrom: i * y_spacing
+            for i, chrom in enumerate(reversed(panel_chroms))
+        }
         panel_limit = panel_limits[col_idx]
 
         for chrom in panel_chroms:
             y = y_positions[chrom]
-            length = chrom_lengths.filter(pl.col("query_chr") == chrom).select("length").item()
+            length = (
+                chrom_lengths.filter(pl.col("query_chr") == chrom)
+                .select("length")
+                .item()
+            )
             bar_bottom = y - bar_height / 2
 
             rect = patches.Rectangle(
@@ -89,14 +113,18 @@ def main(
             ax.add_patch(rect)
 
             chrom_buscos = locations.filter(
-                (pl.col("query_chr") == chrom) & pl.col("assigned_alg").is_in(list(alg_order))
+                (pl.col("query_chr") == chrom)
+                & pl.col("assigned_alg").is_in(list(alg_order))
             )
 
             for row in chrom_buscos.iter_rows(named=True):
                 if row["position"] is not None:
                     color = palette_data.get(row["assigned_alg"], "#858585")
                     tile = patches.Rectangle(
-                        (row["position"] - ctx.obj["tile_width_bp"] / 2, bar_bottom),
+                        (
+                            row["position"] - ctx.obj["tile_width_bp"] / 2,
+                            bar_bottom,
+                        ),
                         ctx.obj["tile_width_bp"],
                         bar_height,
                         facecolor=color,
@@ -117,9 +145,14 @@ def main(
                 )
 
         ax.set_xlim(0, panel_limit)
-        ax.set_ylim(-(bar_height / 2 + 0.5), (len(panel_chroms) - 1) * y_spacing + bar_height / 2 + 0.5)
+        ax.set_ylim(
+            -(bar_height / 2 + 0.5),
+            (len(panel_chroms) - 1) * y_spacing + bar_height / 2 + 0.5,
+        )
         ax.set_xlabel("")
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x / 1e6:.0f}"))
+        ax.xaxis.set_major_formatter(
+            plt.FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
+        )
         ax.set_yticks([y_positions[chrom] for chrom in panel_chroms])
         ax.set_yticklabels(panel_chroms, fontsize=label_fontsize)
         ax.set_ylabel("")
@@ -131,7 +164,10 @@ def main(
     plt.tight_layout()
 
     # Create legend
-    legend_elements = [patches.Patch(facecolor=palette_data.get(alg, "#858585"), label=alg) for alg in alg_order]
+    legend_elements = [
+        patches.Patch(facecolor=palette_data.get(alg, "#858585"), label=alg)
+        for alg in alg_order
+    ]
     if legend_elements:
         fig.legend(
             handles=legend_elements,

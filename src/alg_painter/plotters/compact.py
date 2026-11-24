@@ -34,8 +34,12 @@ def main(
     # Create windows
     windowed = (
         locations.drop_nulls("position")
-        .with_columns((pl.col("position") // window_bp).cast(pl.Int32).alias("window"))
-        .with_columns(((pl.col("window") + 1) * window_bp / 1e6).alias("window_pos_mb"))
+        .with_columns(
+            (pl.col("position") // window_bp).cast(pl.Int32).alias("window")
+        )
+        .with_columns(
+            ((pl.col("window") + 1) * window_bp / 1e6).alias("window_pos_mb")
+        )
     )
 
     # Count ALGs per window per chromosome
@@ -50,12 +54,20 @@ def main(
         return
 
     # Filter chromosomes with enough BUSCOs
-    chrom_totals = windowed.group_by("query_chr").agg(total=pl.col(alg_column).count()).filter(pl.col("total") >= 1)
+    chrom_totals = (
+        windowed.group_by("query_chr")
+        .agg(total=pl.col(alg_column).count())
+        .filter(pl.col("total") >= 1)
+    )
 
-    chrom_order = get_chromosome_order(chrom_lengths.join(chrom_totals, on="query_chr"), ctx)
+    chrom_order = get_chromosome_order(
+        chrom_lengths.join(chrom_totals, on="query_chr"), ctx
+    )
 
     n_chroms = len(chrom_order)
-    logger.info(f"Plotting {len(locations)} BUSCOs across {n_chroms} chromosomes/scaffolds (compact style)...")
+    logger.info(
+        f"Plotting {len(locations)} BUSCOs across {n_chroms} chromosomes/scaffolds (compact style)..."
+    )
 
     # Calculate grid dimensions based on column_count
     ncols = max(1, int(ctx.obj.get("column_count", 1)))
@@ -63,7 +75,9 @@ def main(
 
     # Calculate subplot heights based on bar_height and number of rows
     subplot_height = max(3, bar_height)
-    fig_height = min(subplot_height * nrows / 2, 20)  # Cap max height at 20 inches
+    fig_height = min(
+        subplot_height * nrows / 2, 20
+    )  # Cap max height at 20 inches
     fig_width = 4 * ncols
 
     # Create faceted plot with calculated heights and shared y-axis
@@ -87,11 +101,16 @@ def main(
             continue
 
         # Pivot to get ALG counts per window
-        pivot_data = chrom_data.pivot(on=alg_column, values="n", aggregate_function="sum", sort_columns=False).sort(
-            "window_pos_mb"
-        )
+        pivot_data = chrom_data.pivot(
+            on=alg_column,
+            values="n",
+            aggregate_function="sum",
+            sort_columns=False,
+        ).sort("window_pos_mb")
 
-        window_positions = pivot_data.select("window_pos_mb").to_series().to_list()
+        window_positions = (
+            pivot_data.select("window_pos_mb").to_series().to_list()
+        )
         pivot_data = pivot_data.drop(["query_chr", "window", "window_pos_mb"])
 
         # Calculate totals per window for percentage calculation
@@ -101,17 +120,28 @@ def main(
             continue
 
         totals_per_window = [
-            sum(row) for row in zip(*[pivot_data.select(a).to_series().to_list() for a in alg_columns])
+            sum(row)
+            for row in zip(
+                *[
+                    pivot_data.select(a).to_series().to_list()
+                    for a in alg_columns
+                ]
+            )
         ]
 
         # Stack bars for each ALG with gap between bars (as percentages)
-        bar_width_with_gap = window_mb * 0.8  # 80% of window size for the bar, 20% for gap
+        bar_width_with_gap = (
+            window_mb * 0.8
+        )  # 80% of window size for the bar, 20% for gap
         bottom = None
         for alg in reversed(alg_order):
             if alg in pivot_data.columns:
                 values = pivot_data.select(alg).to_series().to_list()
                 # Convert to percentages
-                percentages = [v / t * 100 if t > 0 else 0 for v, t in zip(values, totals_per_window)]
+                percentages = [
+                    v / t * 100 if t > 0 else 0
+                    for v, t in zip(values, totals_per_window)
+                ]
                 color = palette_data.get(alg, "#858585")
                 ax.bar(
                     window_positions,
@@ -148,7 +178,10 @@ def main(
     fig.supylabel("Composition (%)", fontsize=10, x=0.02)
 
     # Create legend with larger size
-    legend_elements = [patches.Patch(facecolor=palette_data.get(alg, "#858585"), label=alg) for alg in alg_order]
+    legend_elements = [
+        patches.Patch(facecolor=palette_data.get(alg, "#858585"), label=alg)
+        for alg in alg_order
+    ]
     if legend_elements:
         fig.legend(
             handles=legend_elements,

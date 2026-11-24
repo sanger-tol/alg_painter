@@ -22,7 +22,9 @@ def parse_reference_map(ref_path: Path) -> dict[str, str]:
     Return {BUSCO-ID → ALG element} from the reference full_table.
     """
     ref_map: dict[str, str] = {}
-    with open(os.path.join(os.path.dirname(__file__), ref_path), newline="") as reference_file:
+    with open(
+        os.path.join(os.path.dirname(__file__), ref_path), newline=""
+    ) as reference_file:
         reader = csv.reader(reference_file, delimiter="\t")
         for row in reader:
             if not row or len(row) < 2 or row[0].startswith("#"):
@@ -32,7 +34,9 @@ def parse_reference_map(ref_path: Path) -> dict[str, str]:
     return ref_map
 
 
-def parse_busco_table(path: Path) -> tuple[list[tuple], list[str], list[list[str]]]:
+def parse_busco_table(
+    path: Path,
+) -> tuple[list[tuple], list[str], list[list[str]]]:
     """
     Return list of (busco_id, chr, start, stop) tuples and sorted unique chr list.
     This does not filter out any duplicates
@@ -61,12 +65,16 @@ def parse_busco_table(path: Path) -> tuple[list[tuple], list[str], list[list[str
     return tbl, sorted(chroms), header
 
 
-def build_location_rows(reference_map: dict[str, str], query_table: list[tuple]) -> list[str]:
+def build_location_rows(
+    reference_map: dict[str, str], query_table: list[tuple]
+) -> list[str]:
     rows = ["buscoID\tquery_chr\tposition\tassigned_alg\tstatus"]
     for busco_id, query_chromosome, start, end in query_table:
         position = (start + end) / 2
         assigned = reference_map.get(busco_id, "NA")
-        rows.append(f"{busco_id}\t{query_chromosome}\t{position}\t{assigned}\t{assigned}")
+        rows.append(
+            f"{busco_id}\t{query_chromosome}\t{position}\t{assigned}\t{assigned}"
+        )
     return rows
 
 
@@ -76,10 +84,14 @@ def fetch_sequence_report(accession: str, ncbi_api_key: str) -> list[dict]:
     params = {}
     if ncbi_api_key:
         params["api_key"] = ncbi_api_key
-    logger.info(f"[Fetch seq report] Fetching chromosome info from NCBI for {accession}...")
+    logger.info(
+        f"[Fetch seq report] Fetching chromosome info from NCBI for {accession}..."
+    )
     response = requests.get(url, headers=headers, params=params, timeout=60)
     response.raise_for_status()
-    return response.json().get("sequence_report", {}).get("records") or response.json().get("reports", [])
+    return response.json().get("sequence_report", {}).get(
+        "records"
+    ) or response.json().get("reports", [])
 
 
 def write_tsv(lines: list[str], path: Path) -> None:
@@ -97,7 +109,10 @@ def chrom_lengths_with_unloc(records):
     # first map chr_name → main accession
     main_acc = {}
     for rec in records:
-        if rec.get("role") == "assembled-molecule" and rec.get("assigned_molecule_location_type") == "Chromosome":
+        if (
+            rec.get("role") == "assembled-molecule"
+            and rec.get("assigned_molecule_location_type") == "Chromosome"
+        ):
             main_acc[rec["chr_name"]] = rec["genbank_accession"]
 
     bp_tot: dict[str, int] = {acc: 0 for acc in main_acc.values()}
@@ -117,7 +132,9 @@ def chrom_lengths_with_unloc(records):
     return sorted(bp_tot.items(), key=lambda x: -x[1])
 
 
-def fetch_from_ncbi(accession: str, chrom_lengths_output: Path, ncbi_api_key: str) -> list[str]:
+def fetch_from_ncbi(
+    accession: str, chrom_lengths_output: Path, ncbi_api_key: str
+) -> list[str]:
     """
     When an accesstion is provided, fetch the sequence report from NCBI and
     write the chrom lengths to the output file.
@@ -125,7 +142,8 @@ def fetch_from_ncbi(accession: str, chrom_lengths_output: Path, ncbi_api_key: st
     seq_report = fetch_sequence_report(accession, ncbi_api_key)
     pairs: dict = chrom_lengths_with_unloc(seq_report)
     length_lines: list[str] = ["Chrom\tLength_Mb"] + [
-        f"{chromosome}\t{basepairs / 1e6:.3f}" for chromosome, basepairs in pairs
+        f"{chromosome}\t{basepairs / 1e6:.3f}"
+        for chromosome, basepairs in pairs
     ]
     write_tsv(length_lines, chrom_lengths_output)
     return [c for c, _ in pairs]
@@ -143,7 +161,9 @@ def paint_genomes(
 
     output_file_dict = {
         "all_locs": Path(f"{output_dir}/{prefix}_paint_all_locations.tsv"),
-        "chrom_lengths": Path(f"{output_dir}/{prefix}_paint_chrom_lengths.tsv"),
+        "chrom_lengths": Path(
+            f"{output_dir}/{prefix}_paint_chrom_lengths.tsv"
+        ),
         "summary": Path(f"{output_dir}/{prefix}_paint_summary.tsv"),
     }
 
@@ -161,10 +181,16 @@ def paint_genomes(
     all_busco_data = build_location_rows(reference_map, query_table)
 
     if accession:
-        logger.info(f"[Painter] Fetching sequence report for accession: {accession}")
-        chrom_order: list[str] = fetch_from_ncbi(accession, output_file_dict["chrom_lengths"], ncbi_api_key)
+        logger.info(
+            f"[Painter] Fetching sequence report for accession: {accession}"
+        )
+        chrom_order: list[str] = fetch_from_ncbi(
+            accession, output_file_dict["chrom_lengths"], ncbi_api_key
+        )
     else:
-        logger.info(f"[Painter] Using query chromosomes as sequence report: {query_chromosomes}")
+        logger.info(
+            f"[Painter] Using query chromosomes as sequence report: {query_chromosomes}"
+        )
         chrom_order = query_chromosomes.copy()
 
     query_chroms_set = {chrom for _, chrom, _, _ in query_table}
@@ -179,5 +205,7 @@ def paint_genomes(
     logger.info(f"[Painter] Writing summary to: {output_file_dict['summary']}")
     counts: Counter[str] = Counter(chrom for _, chrom, _, _ in query_table)
     counts.update({c: 0 for c in missing})
-    sum_lines = ["query_chr\tbusco_hits"] + [f"{c}\t{counts[c]}" for c in chrom_order]
+    sum_lines = ["query_chr\tbusco_hits"] + [
+        f"{c}\t{counts[c]}" for c in chrom_order
+    ]
     write_tsv(sum_lines, output_file_dict["summary"])

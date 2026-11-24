@@ -34,8 +34,12 @@ def main(
     # Create windows
     windowed = (
         locations.drop_nulls("position")
-        .with_columns((pl.col("position") // window_bp).cast(pl.Int32).alias("window"))
-        .with_columns(((pl.col("window") + 1) * window_bp / 1e6).alias("window_pos_mb"))
+        .with_columns(
+            (pl.col("position") // window_bp).cast(pl.Int32).alias("window")
+        )
+        .with_columns(
+            ((pl.col("window") + 1) * window_bp / 1e6).alias("window_pos_mb")
+        )
     )
 
     # Count ALGs per window per chromosome
@@ -50,12 +54,20 @@ def main(
         return
 
     # Filter chromosomes with enough BUSCOs
-    chrom_totals = windowed.group_by("query_chr").agg(total=pl.col(alg_column).count()).filter(pl.col("total") >= 1)
+    chrom_totals = (
+        windowed.group_by("query_chr")
+        .agg(total=pl.col(alg_column).count())
+        .filter(pl.col("total") >= 1)
+    )
 
-    chrom_order = get_chromosome_order(chrom_lengths.join(chrom_totals, on="query_chr"), ctx)
+    chrom_order = get_chromosome_order(
+        chrom_lengths.join(chrom_totals, on="query_chr"), ctx
+    )
 
     n_chroms = len(chrom_order)
-    logger.info(f"Plotting {len(locations)} BUSCOs across {n_chroms} chromosomes/scaffolds (bar style)...")
+    logger.info(
+        f"Plotting {len(locations)} BUSCOs across {n_chroms} chromosomes/scaffolds (bar style)..."
+    )
 
     # Calculate grid dimensions based on column_count
     ncols = max(1, int(ctx.obj.get("column_count", 1)))
@@ -87,15 +99,22 @@ def main(
             continue
 
         # Pivot to get ALG counts per window
-        pivot_data = chrom_data.pivot(on=alg_column, values="n", aggregate_function="sum", sort_columns=False).sort(
-            "window_pos_mb"
-        )
+        pivot_data = chrom_data.pivot(
+            on=alg_column,
+            values="n",
+            aggregate_function="sum",
+            sort_columns=False,
+        ).sort("window_pos_mb")
 
-        window_positions = pivot_data.select("window_pos_mb").to_series().to_list()
+        window_positions = (
+            pivot_data.select("window_pos_mb").to_series().to_list()
+        )
         pivot_data = pivot_data.drop(["query_chr", "window", "window_pos_mb"])
 
         # Stack bars for each ALG with gap between bars
-        bar_width_with_gap = window_mb * 0.8  # 80% of window size for the bar, 20% for gap
+        bar_width_with_gap = (
+            window_mb * 0.8
+        )  # 80% of window size for the bar, 20% for gap
         bottom = None
         for alg in reversed(alg_order):
             if alg in pivot_data.columns:
@@ -135,7 +154,10 @@ def main(
     fig.supylabel("Count", fontsize=10, x=0.02)
 
     # Create legend with larger size
-    legend_elements = [patches.Patch(facecolor=palette_data.get(alg, "#858585"), label=alg) for alg in alg_order]
+    legend_elements = [
+        patches.Patch(facecolor=palette_data.get(alg, "#858585"), label=alg)
+        for alg in alg_order
+    ]
     if legend_elements:
         fig.legend(
             handles=legend_elements,
